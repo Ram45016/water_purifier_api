@@ -1,4 +1,4 @@
-# Express NeonDB API (sample)
+# Water Purifier API
 
 This is a minimal Express.js API configured to work with Neon (Postgres).  
 It includes a `data/products.json` file (provided by you) and a seed script that inserts sample products into a `products` table.
