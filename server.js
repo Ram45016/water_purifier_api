@@ -17,7 +17,7 @@ app.get('/', (req, res) => {
 <!DOCTYPE html>
 <html>
 <head>
-  <title>🚀 Water Purifier API Docs</title>
+  <title>Water Purifier API Docs</title>
   <style>
     body { font-family: 'Arial', sans-serif; background: #f0f4f8; margin: 0; padding: 0; }
     h1 { text-align: center; color: #0077cc; margin: 20px 0; }
@@ -34,7 +34,7 @@ app.get('/', (req, res) => {
   </style>
 </head>
 <body>
-  <h1>🚀 Water Purifier API Documentation</h1>
+  <h1>Water Purifier API Documentation</h1>
 
   <!-- PRODUCTS -->
   <div class="endpoint" onclick="toggleDesc(this)">
