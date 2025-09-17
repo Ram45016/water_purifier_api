@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 
+const { authenticateToken, authorizeRoles } = require("../middleware/auth");
+
 // GET /api/products
 router.get('/', async (req, res) => {
   try {
@@ -26,7 +28,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/products
-router.post('/', async (req, res) => {
+router.post('/',authenticateToken, authorizeRoles('admin'),  async (req, res) => {
   try {
     const p = req.body;
     const q = `INSERT INTO products
@@ -48,7 +50,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/products/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id',authenticateToken, authorizeRoles('admin'),  async (req, res) => {
   try {
     const p = req.body;
     const q = `UPDATE products SET
@@ -71,7 +73,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/products/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id',authenticateToken, authorizeRoles('admin'),  async (req, res) => {
   try {
     const result = await db.query('DELETE FROM products WHERE id = $1 RETURNING *', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Product not found' });
@@ -81,5 +83,78 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to delete product' });
   }
 });
+
+// // GET /api/products/search?name=xyz&feature=isFeatured
+// router.get('/search', async (req, res) => {
+//   try {
+//     const { name, feature } = req.query;
+//     let q = 'SELECT * FROM products WHERE 1=1';
+//     const values = [];
+//     let idx = 1;
+
+//     // Search by product name (case-insensitive partial match)
+//     if (name) {
+//       q += ` AND LOWER(name) LIKE $${idx++}`;
+//       values.push(`%${name.toLowerCase()}%`);
+//     }
+
+//     // Search by feature (e.g., isTopSelling, isFeatured, isBudgetFriendly)
+//     if (feature) {
+//       if (['isTopSelling', 'isFeatured', 'isBudgetFriendly'].includes(feature)) {
+//         q += ` AND ${feature} = true`;
+//       } else {
+//         return res.status(400).json({ error: 'Invalid feature filter' });
+//       }
+//     }
+
+//     q += ' ORDER BY name';
+
+//     const result = await db.query(q, values);
+//     res.json(result.rows);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ error: 'Failed to search products' });
+//   }
+// });
+
+// GET /api/products/search?name=xyz&feature=isFeatured&fieldKey=color&fieldValue=blue
+router.get('/search', async (req, res) => {
+  try {
+    const { name, feature, fieldKey, fieldValue } = req.query;
+    let q = 'SELECT * FROM products WHERE 1=1';
+    const values = [];
+    let idx = 1;
+
+    // Search by product name (case-insensitive partial match)
+    if (name) {
+      q += ` AND LOWER(name) LIKE $${idx++}`;
+      values.push(`%${name.toLowerCase()}%`);
+    }
+
+    // Search by feature (e.g., isTopSelling, isFeatured, isBudgetFriendly)
+    if (feature) {
+      if (['isTopSelling', 'isFeatured', 'isBudgetFriendly'].includes(feature)) {
+        q += ` AND ${feature} = true`;
+      } else {
+        return res.status(400).json({ error: 'Invalid feature filter' });
+      }
+    }
+
+    // Search inside customFields JSON
+    if (fieldKey && fieldValue) {
+      q += ` AND customFields::jsonb @> $${idx++}::jsonb`;
+      values.push(JSON.stringify({ [fieldKey]: fieldValue }));
+    }
+
+    q += ' ORDER BY name';
+
+    const result = await db.query(q, values);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to search products' });
+  }
+});
+
 
 module.exports = router;

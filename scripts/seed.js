@@ -1,11 +1,11 @@
-// Seed script - reads data/products.json and inserts into products table if not exists
 require("dotenv").config();
 const db = require("../db");
 const fs = require("fs");
+const bcrypt = require("bcryptjs");
 
 (async () => {
   try {
-    // 1. Ensure table exists
+    // 1. Ensure tables exist
     await db.query(`
       CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY,
@@ -24,11 +24,20 @@ const fs = require("fs");
       );
     `);
 
-    // 2. Load JSON data
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'vendor',
+        refresh_token TEXT
+      );
+    `);
+
+    // 2. Seed products
     const raw = fs.readFileSync("./data/products.json", "utf8");
     const products = JSON.parse(raw);
 
-    // 3. Insert products
     for (const p of products) {
       const q = `
         INSERT INTO products
@@ -58,8 +67,31 @@ const fs = require("fs");
       console.log(`Inserted/Skipped product ${p.id} - ${p.name}`);
     }
 
-    console.log("✅ Seed complete.");
+    console.log("✅ Products seed complete.");
+
+    // 3. Seed default users
+    const defaultUsers = [
+      { username: "admin", password: "admin123", role: "admin" },
+      { username: "vendor1", password: "vendor123", role: "vendor" }
+    ];
+
+    for (const u of defaultUsers) {
+      const exists = await db.query(`SELECT id FROM users WHERE username=$1`, [u.username]);
+      if (exists.rows.length === 0) {
+        const hashedPassword = await bcrypt.hash(u.password, 10);
+        await db.query(
+          `INSERT INTO users (username, password, role) VALUES ($1, $2, $3)`,
+          [u.username, hashedPassword, u.role]
+        );
+        console.log(`Inserted user ${u.username} (${u.role})`);
+      } else {
+        console.log(`Skipped existing user ${u.username}`);
+      }
+    }
+
+    console.log("✅ Users seed complete.");
     process.exit(0);
+
   } catch (err) {
     console.error("❌ Seed error", err);
     process.exit(1);
