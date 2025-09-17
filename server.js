@@ -5,7 +5,7 @@ const productsRouter = require('./routes/products');
 const authRouter = require('./routes/auth');
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: "*" })); // allow all origins temporarily for testing
 app.use(express.json());
 
 app.use('/api/products', productsRouter);
