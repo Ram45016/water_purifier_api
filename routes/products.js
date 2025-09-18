@@ -2,8 +2,6 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
 // Setup multer for blob storage
@@ -12,38 +10,47 @@ const upload = multer({ storage });
 
 // --- GET all products ---
 router.get('/', async (req, res) => {
+  console.log("➡️ GET /api/products");
   try {
     const result = await db.query('SELECT * FROM products ORDER BY name');
+    console.log("✅ Products fetched:", result.rows.length);
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    console.error("❌ Error fetching products:", err);
     res.status(500).json({ error: 'Failed to fetch products' });
   }
 });
 
 // --- GET product by ID ---
 router.get('/:id', async (req, res) => {
+  console.log(`➡️ GET /api/products/${req.params.id}`);
   try {
     const result = await db.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
-    if (!result.rows.length) return res.status(404).json({ error: 'Product not found' });
+    if (!result.rows.length) {
+      console.warn(`⚠️ Product not found: ID=${req.params.id}`);
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    console.log("✅ Product fetched:", result.rows[0]);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error("❌ Error fetching product:", err);
     res.status(500).json({ error: 'Failed to fetch product' });
   }
 });
 
 // --- CREATE product ---
 router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('images'), async (req, res) => {
+  console.log("➡️ POST /api/products");
   try {
     const p = req.body;
-    let images = [];
+    console.log("📝 Request body:", p);
+    console.log("📸 Uploaded files:", req.files?.length || 0);
 
-    // Convert uploaded files to base64 strings (or store buffer directly in DB if preferred)
+    let images = [];
     if (req.files) {
       images = req.files.map(file => file.buffer.toString('base64'));
     } else if (p.images) {
-      images = JSON.parse(p.images); // in case frontend sends JSON array
+      images = JSON.parse(p.images);
     }
 
     const q = `INSERT INTO products
@@ -58,23 +65,31 @@ router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('image
       JSON.stringify(p.customFields || [])
     ];
 
+    console.log("📥 Insert query values:", values);
     const result = await db.query(q, values);
+    console.log("✅ Product created:", result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error("❌ Error creating product:", err);
     res.status(500).json({ error: 'Failed to create product' });
   }
 });
 
 // --- UPDATE product ---
 router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('images'), async (req, res) => {
+  console.log(`➡️ PUT /api/products/${req.params.id}`);
   try {
     const p = req.body;
+    console.log("📝 Request body:", p);
+    console.log("📸 Uploaded files:", req.files?.length || 0);
 
-    // Merge existing images with uploaded blobs
     let existing = await db.query('SELECT images FROM products WHERE id=$1', [req.params.id]);
-    if (!existing.rows.length) return res.status(404).json({ error: 'Product not found' });
+    if (!existing.rows.length) {
+      console.warn(`⚠️ Product not found: ID=${req.params.id}`);
+      return res.status(404).json({ error: 'Product not found' });
+    }
     existing = existing.rows[0].images || [];
+    console.log("📂 Existing images count:", existing.length);
 
     let uploadedImages = [];
     if (req.files) uploadedImages = req.files.map(f => f.buffer.toString('base64'));
@@ -92,28 +107,36 @@ router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('ima
       JSON.stringify(p.customFields || []), req.params.id
     ];
 
+    console.log("📥 Update query values:", values);
     const result = await db.query(q, values);
+    console.log("✅ Product updated:", result.rows[0]);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error("❌ Error updating product:", err);
     res.status(500).json({ error: 'Failed to update product' });
   }
 });
 
 // --- DELETE product ---
 router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+  console.log(`➡️ DELETE /api/products/${req.params.id}`);
   try {
     const result = await db.query('DELETE FROM products WHERE id = $1 RETURNING *', [req.params.id]);
-    if (!result.rows.length) return res.status(404).json({ error: 'Product not found' });
+    if (!result.rows.length) {
+      console.warn(`⚠️ Product not found: ID=${req.params.id}`);
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    console.log("✅ Product deleted:", result.rows[0]);
     res.json({ deleted: true, product: result.rows[0] });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Error deleting product:", err);
     res.status(500).json({ error: 'Failed to delete product' });
   }
 });
 
 // --- SEARCH products ---
 router.get('/search', async (req, res) => {
+  console.log("➡️ GET /api/products/search", req.query);
   try {
     const { name, feature, fieldKey, fieldValue } = req.query;
     let q = 'SELECT * FROM products WHERE 1=1';
@@ -135,10 +158,12 @@ router.get('/search', async (req, res) => {
     }
 
     q += ' ORDER BY name';
+    console.log("🔍 Search query:", q, values);
     const result = await db.query(q, values);
+    console.log("✅ Search results:", result.rows.length);
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    console.error("❌ Error searching products:", err);
     res.status(500).json({ error: 'Failed to search products' });
   }
 });
