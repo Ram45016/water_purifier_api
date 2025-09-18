@@ -5,7 +5,7 @@ const pool = require("../db");
 // --- Token Generators ---
 const generateAccessToken = (user) => {
   return jwt.sign(
-    { id: user.id, username: user.username, role: user.role },
+    { id: user.id, email: user.email, role: user.role }, // use email not username
     process.env.JWT_SECRET,
     { expiresIn: "15m" }
   );
@@ -22,24 +22,24 @@ const generateRefreshToken = (user) => {
 // --- Register ---
 const register = async (req, res) => {
   try {
-    let { username, password, role } = req.body;
+    let { email, password, role } = req.body;
     role = role?.toLowerCase();
     const userRole = role && ["vendor", "admin"].includes(role) ? role : "vendor";
 
-    // Check if username exists
-    const exists = await pool.query(`SELECT id FROM users WHERE username=$1`, [username]);
+    // Check if email exists
+    const exists = await pool.query(`SELECT id FROM users WHERE email=$1`, [email]);
     if (exists.rows.length > 0) {
-      return res.status(400).json({ error: "Username already exists" });
+      return res.status(400).json({ error: "Email already exists" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Insert user
     const insertQ = `
-      INSERT INTO users (username, password, role)
-      VALUES ($1, $2, $3) RETURNING id, username, role
+      INSERT INTO users (email, password, role)
+      VALUES ($1, $2, $3) RETURNING id, email, role
     `;
-    const { rows } = await pool.query(insertQ, [username, hashedPassword, userRole]);
+    const { rows } = await pool.query(insertQ, [email, hashedPassword, userRole]);
     const newUser = rows[0];
 
     // Generate tokens
@@ -64,10 +64,10 @@ const register = async (req, res) => {
 // --- Login ---
 const login = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { email, password } = req.body;
 
-    const q = `SELECT * FROM users WHERE username=$1`;
-    const { rows } = await pool.query(q, [username]);
+    const q = `SELECT * FROM users WHERE email=$1`;
+    const { rows } = await pool.query(q, [email]);
     if (rows.length === 0) return res.status(400).json({ error: "Invalid credentials" });
 
     const user = rows[0];
@@ -101,11 +101,13 @@ const login = async (req, res) => {
     // Always issue new access token
     const accessToken = generateAccessToken(user);
 
-    if (refreshExpired) {
-      return res.json({ accessToken, refreshToken });
-    } else {
-      return res.json({ accessToken });
-    }
+    // Always send role so frontend can redirect
+    return res.json({
+      accessToken,
+      refreshToken, // include it always for consistency
+      role: user.role,
+      email: user.email,
+    });
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ error: "Server error" });
