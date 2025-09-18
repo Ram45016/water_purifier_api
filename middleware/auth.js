@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 
-const ACCESS_TOKEN_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // ✅ Authentication Middleware
 function authenticateToken(req, res, next) {
@@ -12,18 +12,21 @@ function authenticateToken(req, res, next) {
     path: req.originalUrl,
     hasAuthHeader: !!authHeader,
     token: token ? token.substring(0, 15) + "..." : null,
-    ACCESS_TOKEN_SECRET: ACCESS_TOKEN_SECRET,
   });
 
+  // Check if a token was provided
   if (!token) {
     console.warn("⚠️ [Auth] No token provided");
-    return res.sendStatus(401);
+    // 401 Unauthorized: The request requires user authentication.
+    return res.status(401).json({ error: "Access denied. No token provided." });
   }
 
-  jwt.verify(token, ACCESS_TOKEN_SECRET, { algorithms: ["HS256"] }, (err, user) => {
+  // Verify the token using the secret key
+  jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
       console.error("❌ [Auth] Token verification failed:", err.message);
-      return res.sendStatus(403);
+      // 403 Forbidden: The server understood the request but refuses to authorize it.
+      return res.status(403).json({ error: "Invalid or expired token." });
     }
     console.log("✅ [Auth] Token verified:", user);
     req.user = user;
@@ -36,9 +39,11 @@ function authorizeRoles(...allowedRoles) {
   return (req, res, next) => {
     console.log("🔑 [Role Check] Required:", allowedRoles, "User role:", req.user?.role);
 
+    // Check if the user's role is in the list of allowed roles
     if (!req.user || !allowedRoles.includes(req.user.role)) {
-      console.warn("🚫 [Role Check] Access denied for:", req.user);
-      return res.sendStatus(403);
+      console.warn("🚫 [Role Check] Access denied for:", req.user?.role);
+      // 403 Forbidden: The user does not have the necessary permissions.
+      return res.status(403).json({ error: "Forbidden. You do not have the required permissions." });
     }
 
     console.log("✅ [Role Check] Access granted to:", req.user.role);
