@@ -12,6 +12,7 @@ function authenticateToken(req, res, next) {
     path: req.originalUrl,
     hasAuthHeader: !!authHeader,
     token: token ? token.substring(0, 15) + "..." : null,
+    ACCESS_TOKEN_SECRET: ACCESS_TOKEN_SECRET,
   });
 
   if (!token) {
