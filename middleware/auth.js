@@ -3,7 +3,7 @@ const jwt = require("jsonwebtoken");
 const JWT_SECRET = process.env.JWT_SECRET;
 
 // ✅ Authentication Middleware (Synchronous)
-function authenticateTokenSync(req, res, next) {
+function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
@@ -47,4 +47,4 @@ function authorizeRoles(...allowedRoles) {
   };
 }
 
-module.exports = { authenticateTokenSync, authorizeRoles };
+module.exports = { authenticateToken, authorizeRoles };
