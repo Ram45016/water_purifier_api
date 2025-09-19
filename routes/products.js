@@ -5,7 +5,7 @@ const multer = require('multer');
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
 // Setup multer for blob storage
-const storage = multer.memoryStorage(); // store in memory as Buffer
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 // --- GET all products ---
@@ -46,23 +46,46 @@ router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('image
     console.log("📝 Request body:", p);
     console.log("📸 Uploaded files:", req.files?.length || 0);
 
-    let images = [];
-    if (req.files) {
-      images = req.files.map(file => file.buffer.toString('base64'));
-    } else if (p.images) {
-      images = JSON.parse(p.images);
+    // Handle customFields safely
+    let customFields = [];
+    if (typeof p.customFields === "string") {
+      try {
+        customFields = JSON.parse(p.customFields);
+      } catch {
+        customFields = [];
+      }
+    } else if (p.customFields) {
+      customFields = p.customFields;
     }
 
-    const q = `INSERT INTO products
-      (id, name, "brandName", "buyingPrice", "sellingPrice", "vendorPrice", quantity, date, images, "isTopSelling", "isFeatured", "isBudgetFriendly", "customFields")
+    // Handle images
+    let images = [];
+    if (req.files && req.files.length) {
+      images = req.files.map(file => file.buffer.toString('base64'));
+    }
+
+    const q = `
+      INSERT INTO products
+        (id, name, "brandName", "buyingPrice", "sellingPrice", "vendorPrice",
+        quantity, date, images, "isTopSelling", "isFeatured", "isBudgetFriendly", "customFields")
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-      RETURNING *`;
+      RETURNING *
+    `;
 
     const values = [
-      p.id, p.name, p.brandName, p.buyingPrice, p.sellingPrice, p.vendorPrice,
-      p.quantity, p.date, JSON.stringify(images),
-      p.isTopSelling || false, p.isFeatured || false, p.isBudgetFriendly || false,
-      JSON.stringify(p.customFields || [])
+      p.id,
+      p.name,
+      p.brandName,
+      p.buyingPrice,
+      p.sellingPrice,
+      p.vendorPrice,
+      p.quantity,
+      p.date,
+      JSON.stringify(images),  // array of base64 strings
+      p.isTopSelling === "true" || p.isTopSelling === true,
+      p.isFeatured === "true" || p.isFeatured === true,
+      p.isBudgetFriendly === "true" || p.isBudgetFriendly === true,
+      JSON.stringify(customFields)
     ];
 
     console.log("📥 Insert query values:", values);
@@ -92,19 +115,44 @@ router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('ima
     console.log("📂 Existing images count:", existing.length);
 
     let uploadedImages = [];
-    if (req.files) uploadedImages = req.files.map(f => f.buffer.toString('base64'));
+    if (req.files && req.files.length) {
+      uploadedImages = req.files.map(f => f.buffer.toString('base64'));
+    }
     const images = JSON.stringify([...existing, ...uploadedImages]);
 
-    const q = `UPDATE products SET
-      name=$1, "brandName"=$2, "buyingPrice"=$3, "sellingPrice"=$4, "vendorPrice"=$5,
-      quantity=$6, date=$7, images=$8, "isTopSelling"=$9, "isFeatured"=$10, "isBudgetFriendly"=$11, "customFields"=$12
-      WHERE id=$13 RETURNING *`;
+    // Handle customFields
+    let customFields = [];
+    if (typeof p.customFields === "string") {
+      try {
+        customFields = JSON.parse(p.customFields);
+      } catch {
+        customFields = [];
+      }
+    } else if (p.customFields) {
+      customFields = p.customFields;
+    }
+
+    const q = `
+      UPDATE products SET
+        name=$1, "brandName"=$2, "buyingPrice"=$3, "sellingPrice"=$4, "vendorPrice"=$5,
+        quantity=$6, date=$7, images=$8, "isTopSelling"=$9, "isFeatured"=$10, "isBudgetFriendly"=$11, "customFields"=$12
+      WHERE id=$13 RETURNING *
+    `;
 
     const values = [
-      p.name, p.brandName, p.buyingPrice, p.sellingPrice, p.vendorPrice,
-      p.quantity, p.date, images,
-      p.isTopSelling || false, p.isFeatured || false, p.isBudgetFriendly || false,
-      JSON.stringify(p.customFields || []), req.params.id
+      p.name,
+      p.brandName,
+      p.buyingPrice,
+      p.sellingPrice,
+      p.vendorPrice,
+      p.quantity,
+      p.date,
+      images,
+      p.isTopSelling === "true" || p.isTopSelling === true,
+      p.isFeatured === "true" || p.isFeatured === true,
+      p.isBudgetFriendly === "true" || p.isBudgetFriendly === true,
+      JSON.stringify(customFields),
+      req.params.id
     ];
 
     console.log("📥 Update query values:", values);
