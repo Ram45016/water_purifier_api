@@ -8,6 +8,41 @@ const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
+// --- SEARCH products ---
+// Move search above /:id route to avoid route conflict
+router.get('/search', async (req, res) => {
+  console.log("➡️ GET /api/products/search", req.query);
+  try {
+    const { name, feature, fieldKey, fieldValue } = req.query;
+    let q = 'SELECT * FROM products WHERE 1=1';
+    const values = [];
+    let idx = 1;
+
+    if (name) {
+      q += ` AND LOWER(name) LIKE $${idx++}`;
+      values.push(`%${name.toLowerCase()}%`);
+    }
+
+    if (feature && ['is_top_selling', 'is_featured', 'is_budget_friendly'].includes(feature)) {
+      q += ` AND "${feature}" = true`;
+    }
+
+    if (fieldKey && fieldValue) {
+      q += ` AND "custom_fields"::jsonb @> $${idx++}::jsonb`;
+      values.push(JSON.stringify({ [fieldKey]: fieldValue }));
+    }
+
+    q += ' ORDER BY name';
+    console.log("🔍 Search query:", q, values);
+    const result = await db.query(q, values);
+    console.log("✅ Search results:", result.rows.length);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Error searching products:", err);
+    res.status(500).json({ error: 'Failed to search products' });
+  }
+});
+
 // --- GET all products ---
 router.get('/', async (req, res) => {
   console.log("➡️ GET /api/products");
@@ -46,19 +81,19 @@ router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('image
     console.log("📝 Request body:", p);
     console.log("📸 Uploaded files:", req.files?.length || 0);
 
-    // Handle customFields safely
-    let customFields = [];
+    // Handle customFields safely (map to custom_fields for DB)
+    let custom_fields = [];
     if (typeof p.customFields === "string") {
       try {
-        customFields = JSON.parse(p.customFields);
+        custom_fields = JSON.parse(p.customFields);
       } catch {
-        customFields = [];
+        custom_fields = [];
       }
     } else if (p.customFields) {
-      customFields = p.customFields;
+      custom_fields = p.customFields;
     }
 
-    // Handle images
+    // Handle images as base64 strings
     let images = [];
     if (req.files && req.files.length) {
       images = req.files.map(file => file.buffer.toString('base64'));
@@ -67,7 +102,7 @@ router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('image
     const q = `
       INSERT INTO products
         (id, name, "brand_name", "buying_price", "selling_price", "vendor_price",
-        quantity, date, images, "is_top_selling", "is_featured", "is_budget_friendly", "custom_fields")
+         quantity, date, images, "is_top_selling", "is_featured", "is_budget_friendly", "custom_fields")
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       RETURNING *
     `;
@@ -81,11 +116,11 @@ router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('image
       p.vendor_price,
       p.quantity,
       p.date,
-      JSON.stringify(images),  // array of base64 strings
+      JSON.stringify(images),
       p.is_top_selling === "true" || p.is_top_selling === true,
       p.is_featured === "true" || p.is_featured === true,
       p.is_budget_friendly === "true" || p.is_budget_friendly === true,
-      Array.isArray(p.custom_fields) ? p.custom_fields : []
+      JSON.stringify(custom_fields),
     ];
 
     console.log("📥 Insert query values:", values);
@@ -106,12 +141,12 @@ router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('ima
     console.log("📝 Request body:", p);
     console.log("📸 Uploaded files:", req.files?.length || 0);
 
-    let existing = await db.query('SELECT images FROM products WHERE id=$1', [req.params.id]);
-    if (!existing.rows.length) {
+    let existingRes = await db.query('SELECT images FROM products WHERE id=$1', [req.params.id]);
+    if (!existingRes.rows.length) {
       console.warn(`⚠️ Product not found: ID=${req.params.id}`);
       return res.status(404).json({ error: 'Product not found' });
     }
-    existing = existing.rows[0].images || [];
+    const existing = existingRes.rows[0].images || [];
     console.log("📂 Existing images count:", existing.length);
 
     let uploadedImages = [];
@@ -120,38 +155,38 @@ router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('ima
     }
     const images = JSON.stringify([...existing, ...uploadedImages]);
 
-    // Handle customFields
-    let customFields = [];
+    // Handle customFields safely (map to custom_fields)
+    let custom_fields = [];
     if (typeof p.customFields === "string") {
       try {
-        customFields = JSON.parse(p.customFields);
+        custom_fields = JSON.parse(p.customFields);
       } catch {
-        customFields = [];
+        custom_fields = [];
       }
     } else if (p.customFields) {
-      customFields = p.customFields;
+      custom_fields = p.customFields;
     }
 
     const q = `
       UPDATE products SET
-        name=$1, "brandName"=$2, "buyingPrice"=$3, "sellingPrice"=$4, "vendorPrice"=$5,
-        quantity=$6, date=$7, images=$8, "isTopSelling"=$9, "isFeatured"=$10, "isBudgetFriendly"=$11, "customFields"=$12
+        name=$1, "brand_name"=$2, "buying_price"=$3, "selling_price"=$4, "vendor_price"=$5,
+        quantity=$6, date=$7, images=$8, "is_top_selling"=$9, "is_featured"=$10, "is_budget_friendly"=$11, "custom_fields"=$12
       WHERE id=$13 RETURNING *
     `;
 
     const values = [
       p.name,
-      p.brandName,
-      p.buyingPrice,
-      p.sellingPrice,
-      p.vendorPrice,
+      p.brand_name,
+      p.buying_price,
+      p.selling_price,
+      p.vendor_price,
       p.quantity,
       p.date,
       images,
-      p.isTopSelling === "true" || p.isTopSelling === true,
-      p.isFeatured === "true" || p.isFeatured === true,
-      p.isBudgetFriendly === "true" || p.isBudgetFriendly === true,
-      JSON.stringify(customFields),
+      p.is_top_selling === "true" || p.is_top_selling === true,
+      p.is_featured === "true" || p.is_featured === true,
+      p.is_budget_friendly === "true" || p.is_budget_friendly === true,
+      JSON.stringify(custom_fields),
       req.params.id
     ];
 
@@ -179,40 +214,6 @@ router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, re
   } catch (err) {
     console.error("❌ Error deleting product:", err);
     res.status(500).json({ error: 'Failed to delete product' });
-  }
-});
-
-// --- SEARCH products ---
-router.get('/search', async (req, res) => {
-  console.log("➡️ GET /api/products/search", req.query);
-  try {
-    const { name, feature, fieldKey, fieldValue } = req.query;
-    let q = 'SELECT * FROM products WHERE 1=1';
-    const values = [];
-    let idx = 1;
-
-    if (name) {
-      q += ` AND LOWER(name) LIKE $${idx++}`;
-      values.push(`%${name.toLowerCase()}%`);
-    }
-
-    if (feature && ['isTopSelling','isFeatured','isBudgetFriendly'].includes(feature)) {
-      q += ` AND "${feature}" = true`;
-    }
-
-    if (fieldKey && fieldValue) {
-      q += ` AND "customFields"::jsonb @> $${idx++}::jsonb`;
-      values.push(JSON.stringify({ [fieldKey]: fieldValue }));
-    }
-
-    q += ' ORDER BY name';
-    console.log("🔍 Search query:", q, values);
-    const result = await db.query(q, values);
-    console.log("✅ Search results:", result.rows.length);
-    res.json(result.rows);
-  } catch (err) {
-    console.error("❌ Error searching products:", err);
-    res.status(500).json({ error: 'Failed to search products' });
   }
 });
 
