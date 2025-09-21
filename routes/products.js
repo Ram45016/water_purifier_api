@@ -150,7 +150,7 @@ router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('ima
     if (req.files && req.files.length) {
       uploadedImages = req.files.map(f => f.buffer.toString('base64'));
     }
-    const images = JSON.stringify([...existing, ...uploadedImages]);
+    const images = p.images;
 
     // Handle customFields safely (map to custom_fields)
     let custom_fields = [];
