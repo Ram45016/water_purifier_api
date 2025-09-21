@@ -157,14 +157,14 @@ router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('ima
 
     // Handle customFields safely (map to custom_fields)
     let custom_fields = [];
-    if (typeof p.customFields === "string") {
+    if (typeof p.custom_fields === "string") {
       try {
-        custom_fields = JSON.parse(p.customFields);
+        custom_fields = JSON.parse(p.custom_fields);
       } catch {
         custom_fields = [];
       }
-    } else if (p.customFields) {
-      custom_fields = p.customFields;
+    } else if (p.custom_fields) {
+      custom_fields = p.custom_fields;
     }
 
     const q = `
