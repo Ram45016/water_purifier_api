@@ -75,17 +75,17 @@ router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('image
     const values = [
       p.id,
       p.name,
-      p.brandName,
-      p.buyingPrice,
-      p.sellingPrice,
-      p.vendorPrice,
+      p.brand_name,
+      p.buying_price,
+      p.selling_price,
+      p.vendor_price,
       p.quantity,
       p.date,
       JSON.stringify(images),  // array of base64 strings
-      p.isTopSelling === "true" || p.isTopSelling === true,
-      p.isFeatured === "true" || p.isFeatured === true,
-      p.isBudgetFriendly === "true" || p.isBudgetFriendly === true,
-      JSON.stringify(customFields)
+      p.is_top_selling === "true" || p.is_top_selling === true,
+      p.is_featured === "true" || p.is_featured === true,
+      p.is_budget_friendly === "true" || p.is_budget_friendly === true,
+      JSON.stringify(custom_fields)
     ];
 
     console.log("📥 Insert query values:", values);
