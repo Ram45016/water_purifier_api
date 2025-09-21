@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const productsRouter = require('./routes/products');
 const authRouter = require('./routes/auth');
+const { camelToSnake } = require('./utils/caseConverter'); // helper
 
 const app = express();
 app.use(cors({
@@ -11,6 +12,13 @@ app.use(cors({
   allowedHeaders: ['Content-Type','Authorization']
 }));
 app.use(express.json());
+
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === 'object') {
+    req.body = camelToSnake(req.body);
+  }
+  next();
+});
 
 app.use('/api/products', productsRouter);
 app.use('/api/auth', authRouter);
