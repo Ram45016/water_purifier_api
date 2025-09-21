@@ -66,8 +66,8 @@ router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('image
 
     const q = `
       INSERT INTO products
-        (id, name, "brandName", "buyingPrice", "sellingPrice", "vendorPrice",
-        quantity, date, images, "isTopSelling", "isFeatured", "isBudgetFriendly", "customFields")
+        (id, name, "brand_name", "buying_price", "selling_price", "vendor_price",
+        quantity, date, images, "is_top_selling", "is_featured", "is_budget_friendly", "custom_fields")
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       RETURNING *
     `;
