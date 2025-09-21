@@ -143,14 +143,32 @@ router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('ima
       console.warn(`⚠️ Product not found: ID=${req.params.id}`);
       return res.status(404).json({ error: 'Product not found' });
     }
-    const existing = existingRes.rows[0].images || [];
-    console.log("📂 Existing images count:", existing.length);
 
+    const existingImages = existingRes.rows[0].images || [];
+    console.log("📂 Existing images count:", existingImages.length);
+
+    // Uploaded images from files (base64)
     let uploadedImages = [];
     if (req.files && req.files.length) {
       uploadedImages = req.files.map(f => f.buffer.toString('base64'));
     }
-    const images = p.images||[];
+
+    // Images sent in request body, parse if string
+    let bodyImages = [];
+    if (p.images) {
+      if (typeof p.images === "string") {
+        try {
+          bodyImages = JSON.parse(p.images);
+        } catch {
+          bodyImages = [];
+        }
+      } else if (Array.isArray(p.images)) {
+        bodyImages = p.images;
+      }
+    }
+
+    // Merge existing + bodyImages + uploadedImages
+    const images = JSON.stringify([...existingImages, ...bodyImages, ...uploadedImages]);
 
     // Handle customFields safely (map to custom_fields)
     let custom_fields = [];
