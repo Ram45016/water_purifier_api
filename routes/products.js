@@ -85,7 +85,7 @@ router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('image
       p.is_top_selling === "true" || p.is_top_selling === true,
       p.is_featured === "true" || p.is_featured === true,
       p.is_budget_friendly === "true" || p.is_budget_friendly === true,
-      JSON.stringify(custom_fields)
+      JSON.stringify(p.custom_fields)
     ];
 
     console.log("📥 Insert query values:", values);
