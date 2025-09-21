@@ -94,7 +94,7 @@ router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('image
     }
 
     // Handle images as base64 strings
-    let images = req.images || [];
+    let images = p.images || [];
 
     const q = `
       INSERT INTO products
