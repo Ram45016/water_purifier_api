@@ -138,28 +138,27 @@ router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('ima
     console.log("📝 Request body:", p);
     console.log("📸 Uploaded files:", req.files?.length || 0);
 
-    let existingRes = await db.query('SELECT images FROM products WHERE id=$1', [req.params.id]);
-    if (!existingRes.rows.length) {
+    // Check if product exists
+    const existsRes = await db.query('SELECT id FROM products WHERE id = $1', [req.params.id]);
+    if (!existsRes.rows.length) {
       console.warn(`⚠️ Product not found: ID=${req.params.id}`);
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    const existingImages = existingRes.rows[0].images || [];
-    console.log("📂 Existing images count:", existingImages.length);
-
-    // Uploaded images from files (base64)
+    // Uploaded images (converted to base64)
     let uploadedImages = [];
     if (req.files && req.files.length) {
       uploadedImages = req.files.map(f => f.buffer.toString('base64'));
     }
 
-    // Images sent in request body, parse if string
+    // Images from request body
     let bodyImages = [];
     if (p.images) {
       if (typeof p.images === "string") {
         try {
           bodyImages = JSON.parse(p.images);
         } catch {
+          console.warn("⚠️ Failed to parse images from body");
           bodyImages = [];
         }
       } else if (Array.isArray(p.images)) {
@@ -167,21 +166,23 @@ router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('ima
       }
     }
 
-    // Merge existing + bodyImages + uploadedImages
-    const images = JSON.stringify([...existingImages, ...bodyImages, ...uploadedImages]);
+    // Final images (overwrite existing)
+    const images = JSON.stringify([...bodyImages, ...uploadedImages]);
 
-    // Handle customFields safely (map to custom_fields)
+    // Handle custom_fields
     let custom_fields = [];
     if (typeof p.custom_fields === "string") {
       try {
         custom_fields = JSON.parse(p.custom_fields);
       } catch {
+        console.warn("⚠️ Failed to parse custom_fields from body");
         custom_fields = [];
       }
     } else if (p.custom_fields) {
       custom_fields = p.custom_fields;
     }
 
+    // Update query
     const q = `
       UPDATE products SET
         name=$1, "brand_name"=$2, "buying_price"=$3, "selling_price"=$4, "vendor_price"=$5,
@@ -214,6 +215,7 @@ router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('ima
     res.status(500).json({ error: 'Failed to update product' });
   }
 });
+
 
 // --- DELETE product ---
 router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
