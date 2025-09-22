@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const multer = require('multer');
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
+const { camelToSnake } = require("../utils/caseConverter");
 
 // Setup multer for blob storage
 const storage = multer.memoryStorage();
@@ -77,10 +78,10 @@ router.get('/:id', async (req, res) => {
 router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('images'), async (req, res) => {
   console.log("➡️ POST /api/products");
   try {
-    const p = req.body;
-    console.log("📝 Request body:", p);
-    console.log("📸 Uploaded files:", req.files?.length || 0);
+    const p = camelToSnake(req.body);
 
+    console.log("📝 Request body (snake_case):", p);
+    console.log("📸 Uploaded files:", req.files?.length || 0);
     // Handle customFields safely (map to custom_fields for DB)
     let custom_fields = [];
     if (typeof p.custom_fields === "string") {
@@ -134,8 +135,9 @@ router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('image
 router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('images'), async (req, res) => {
   console.log(`➡️ PUT /api/products/${req.params.id}`);
   try {
-    const p = req.body;
-    console.log("📝 Request body:", p);
+    const p = camelToSnake(req.body);
+
+    console.log("📝 Request body (snake_case):", p);
     console.log("📸 Uploaded files:", req.files?.length || 0);
 
     // Check if product exists
