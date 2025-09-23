@@ -20,7 +20,8 @@ const bcrypt = require("bcryptjs");
         is_top_selling BOOLEAN DEFAULT false,
         is_featured BOOLEAN DEFAULT false,
         is_budget_friendly BOOLEAN DEFAULT false,
-        custom_fields JSONB
+        custom_fields JSONB,
+        description TEXT
       );
     `);
 
@@ -34,23 +35,29 @@ const bcrypt = require("bcryptjs");
       );
     `);
 
-    // 2. Seed products
+    // 2. Add description column if not exists (for migrations)
+    await db.query(`
+      ALTER TABLE products
+      ADD COLUMN IF NOT EXISTS description TEXT;
+    `);
+
+    // 3. Seed products
     const raw = fs.readFileSync("./data/products.json", "utf8");
     const products = JSON.parse(raw);
 
     for (const p of products) {
       const q = `
         INSERT INTO products
-          (id, name, brand_name, buying_price, selling_price, vendor_price, quantity, date, images, is_top_selling, is_featured, is_budget_friendly, custom_fields)
+          (id, name, brand_name, buying_price, selling_price, vendor_price, quantity, date, images, is_top_selling, is_featured, is_budget_friendly, custom_fields, description)
         VALUES
-          ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+          ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
         ON CONFLICT (id) DO NOTHING
       `;
 
       const values = [
         p.id,
         p.name,
-        p.brandName, // still camelCase from JSON
+        p.brandName,
         p.buyingPrice,
         p.sellingPrice,
         p.vendorPrice,
@@ -61,6 +68,7 @@ const bcrypt = require("bcryptjs");
         p.isFeatured || false,
         p.isBudgetFriendly || false,
         JSON.stringify(p.customFields || []),
+        p.description || null
       ];
 
       await db.query(q, values);
@@ -69,7 +77,7 @@ const bcrypt = require("bcryptjs");
 
     console.log("✅ Products seed complete.");
 
-    // 3. Seed default users (email only)
+    // 4. Seed default users
     const defaultUsers = [
       { email: "admin@example.com", password: "admin123", role: "admin" },
       { email: "vendor1@example.com", password: "vendor123", role: "vendor" }
