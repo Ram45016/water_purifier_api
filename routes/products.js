@@ -5,9 +5,18 @@ const multer = require('multer');
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const { camelToSnake } = require("../utils/caseConverter");
 
-// Setup multer for blob storage
+
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+
+const upload = multer({
+  storage,
+  limits: {
+    fieldSize: 10 * 1024 * 1024, // ✅ Fix: increase field size limit to 10MB
+    fileSize: 5 * 1024 * 1024,   // Optional: image size limit per file
+    files: 5,                    // Optional: limit number of files
+  },
+});
+
 
 // --- SEARCH products ---
 router.get('/search', async (req, res) => {
