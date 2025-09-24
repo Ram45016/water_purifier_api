@@ -1,26 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const multer = require('multer');
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const { camelToSnake } = require("../utils/caseConverter");
 
 
-const storage = multer.memoryStorage();
-
-const upload = multer({
-  storage,
-  limits: {
-    fieldSize: 10 * 1024 * 1024, // ✅ Fix: increase field size limit to 10MB
-    fileSize: 5 * 1024 * 1024,   // Optional: image size limit per file
-    files: 5,                    // Optional: limit number of files
-  },
-});
-
-
 // --- SEARCH products ---
 router.get('/search', async (req, res) => {
-  console.log("➡️ GET /api/products/search", req.query);
   try {
     const { name, feature, fieldKey, fieldValue } = req.query;
     let q = 'SELECT * FROM products WHERE 1=1';
@@ -42,9 +28,7 @@ router.get('/search', async (req, res) => {
     }
 
     q += ' ORDER BY name';
-    console.log("🔍 Search query:", q, values);
     const result = await db.query(q, values);
-    console.log("✅ Search results:", result.rows.length);
     res.json(result.rows);
   } catch (err) {
     console.error("❌ Error searching products:", err);
@@ -52,12 +36,11 @@ router.get('/search', async (req, res) => {
   }
 });
 
+
 // --- GET all products ---
 router.get('/', async (req, res) => {
-  console.log("➡️ GET /api/products");
   try {
     const result = await db.query('SELECT * FROM products ORDER BY name');
-    console.log("✅ Products fetched:", result.rows.length);
     res.json(result.rows);
   } catch (err) {
     console.error("❌ Error fetching products:", err);
@@ -65,16 +48,14 @@ router.get('/', async (req, res) => {
   }
 });
 
+
 // --- GET product by ID ---
 router.get('/:id', async (req, res) => {
-  console.log(`➡️ GET /api/products/${req.params.id}`);
   try {
     const result = await db.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
     if (!result.rows.length) {
-      console.warn(`⚠️ Product not found: ID=${req.params.id}`);
       return res.status(404).json({ error: 'Product not found' });
     }
-    console.log("✅ Product fetched:", result.rows[0]);
     res.json(result.rows[0]);
   } catch (err) {
     console.error("❌ Error fetching product:", err);
@@ -82,14 +63,22 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// --- CREATE product ---
-router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('images'), async (req, res) => {
-  console.log("➡️ POST /api/products");
+
+// --- CREATE product (no image upload) ---
+router.post('/', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const p = camelToSnake(req.body);
 
-    console.log("📝 Request body (snake_case):", p);
-    console.log("📸 Uploaded files:", req.files?.length || 0);
+    let images = [];
+    if (typeof p.images === "string") {
+      try {
+        images = JSON.parse(p.images);
+      } catch {
+        images = [];
+      }
+    } else if (Array.isArray(p.images)) {
+      images = p.images;
+    }
 
     let custom_fields = [];
     if (typeof p.custom_fields === "string") {
@@ -101,8 +90,6 @@ router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('image
     } else if (p.custom_fields) {
       custom_fields = p.custom_fields;
     }
-
-    let images = p.images || [];
 
     const q = `
       INSERT INTO products
@@ -129,9 +116,7 @@ router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('image
       p.description || null
     ];
 
-    console.log("📥 Insert query values:", values);
     const result = await db.query(q, values);
-    console.log("✅ Product created:", result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error("❌ Error creating product:", err);
@@ -139,48 +124,33 @@ router.post('/', authenticateToken, authorizeRoles('admin'), upload.array('image
   }
 });
 
-// --- UPDATE product ---
-router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('images'), async (req, res) => {
-  console.log(`➡️ PUT /api/products/${req.params.id}`);
+
+// --- UPDATE product (no image upload) ---
+router.put('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const p = camelToSnake(req.body);
 
-    console.log("📝 Request body (snake_case):", p);
-    console.log("📸 Uploaded files:", req.files?.length || 0);
-
     const existsRes = await db.query('SELECT id FROM products WHERE id = $1', [req.params.id]);
     if (!existsRes.rows.length) {
-      console.warn(`⚠️ Product not found: ID=${req.params.id}`);
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    let uploadedImages = [];
-    if (req.files && req.files.length) {
-      uploadedImages = req.files.map(f => f.buffer.toString('base64'));
-    }
-
-    let bodyImages = [];
-    if (p.images) {
-      if (typeof p.images === "string") {
-        try {
-          bodyImages = JSON.parse(p.images);
-        } catch {
-          console.warn("⚠️ Failed to parse images from body");
-          bodyImages = [];
-        }
-      } else if (Array.isArray(p.images)) {
-        bodyImages = p.images;
+    let images = [];
+    if (typeof p.images === "string") {
+      try {
+        images = JSON.parse(p.images);
+      } catch {
+        images = [];
       }
+    } else if (Array.isArray(p.images)) {
+      images = p.images;
     }
-
-    const images = JSON.stringify([...bodyImages, ...uploadedImages]);
 
     let custom_fields = [];
     if (typeof p.custom_fields === "string") {
       try {
         custom_fields = JSON.parse(p.custom_fields);
       } catch {
-        console.warn("⚠️ Failed to parse custom_fields from body");
         custom_fields = [];
       }
     } else if (p.custom_fields) {
@@ -203,7 +173,7 @@ router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('ima
       p.vendor_price,
       p.quantity,
       p.date,
-      images,
+      JSON.stringify(images),
       p.is_top_selling === "true" || p.is_top_selling === true,
       p.is_featured === "true" || p.is_featured === true,
       p.is_budget_friendly === "true" || p.is_budget_friendly === true,
@@ -212,9 +182,7 @@ router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('ima
       req.params.id
     ];
 
-    console.log("📥 Update query values:", values);
     const result = await db.query(q, values);
-    console.log("✅ Product updated:", result.rows[0]);
     res.json(result.rows[0]);
   } catch (err) {
     console.error("❌ Error updating product:", err);
@@ -222,16 +190,14 @@ router.put('/:id', authenticateToken, authorizeRoles('admin'), upload.array('ima
   }
 });
 
+
 // --- DELETE product ---
 router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
-  console.log(`➡️ DELETE /api/products/${req.params.id}`);
   try {
     const result = await db.query('DELETE FROM products WHERE id = $1 RETURNING *', [req.params.id]);
     if (!result.rows.length) {
-      console.warn(`⚠️ Product not found: ID=${req.params.id}`);
       return res.status(404).json({ error: 'Product not found' });
     }
-    console.log("✅ Product deleted:", result.rows[0]);
     res.json({ deleted: true, product: result.rows[0] });
   } catch (err) {
     console.error("❌ Error deleting product:", err);
