@@ -3,9 +3,14 @@ const router = express.Router();
 const db = require('../db');
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const { camelToSnake } = require("../utils/caseConverter");
+const cloudinary = require('cloudinary').v2;
 
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
-// --- SEARCH products ---
 router.get('/search', async (req, res) => {
   try {
     const { name, feature, fieldKey, fieldValue } = req.query;
@@ -36,7 +41,6 @@ router.get('/search', async (req, res) => {
   }
 });
 
-
 // --- GET all products ---
 router.get('/', async (req, res) => {
   try {
@@ -47,7 +51,6 @@ router.get('/', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch products' });
   }
 });
-
 
 // --- GET product by ID ---
 router.get('/:id', async (req, res) => {
@@ -62,7 +65,6 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch product' });
   }
 });
-
 
 // --- CREATE product (no image upload) ---
 router.post('/', authenticateToken, authorizeRoles('admin'), async (req, res) => {
@@ -123,7 +125,6 @@ router.post('/', authenticateToken, authorizeRoles('admin'), async (req, res) =>
     res.status(500).json({ error: 'Failed to create product' });
   }
 });
-
 
 // --- UPDATE product (no image upload) ---
 router.put('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
@@ -190,15 +191,47 @@ router.put('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) 
   }
 });
 
-
-// --- DELETE product ---
+// --- DELETE product with Cloudinary image deletion ---
 router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
-    const result = await db.query('DELETE FROM products WHERE id = $1 RETURNING *', [req.params.id]);
-    if (!result.rows.length) {
+    // 1. Fetch the product first
+    const productRes = await db.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
+    if (!productRes.rows.length) {
       return res.status(404).json({ error: 'Product not found' });
     }
-    res.json({ deleted: true, product: result.rows[0] });
+    const product = productRes.rows[0];
+
+    // 2. Extract public IDs from product.images
+    let images = [];
+    if (product.images) {
+      try {
+        images = JSON.parse(product.images);
+      } catch {
+        images = [];
+      }
+    }
+
+    // Helper to extract public ID from Cloudinary URL
+    const getPublicId = (url) => {
+      // Example URL:
+      // https://res.cloudinary.com/<cloud_name>/image/upload/v<version>/<public_id>.<ext>
+      // We want the "<public_id>" part without extension
+      const parts = url.split('/');
+      const fileWithExt = parts.pop(); // last part with extension
+      return fileWithExt.substring(0, fileWithExt.lastIndexOf('.')); // remove extension
+    };
+
+    const publicIds = images.map(getPublicId);
+
+    // 3. Delete images from Cloudinary if any
+    if (publicIds.length > 0) {
+      await cloudinary.api.delete_resources(publicIds);
+    }
+
+    // 4. Delete product from DB
+    const deleteRes = await db.query('DELETE FROM products WHERE id = $1 RETURNING *', [req.params.id]);
+
+    res.json({ deleted: true, product: deleteRes.rows[0] });
   } catch (err) {
     console.error("❌ Error deleting product:", err);
     res.status(500).json({ error: 'Failed to delete product' });
